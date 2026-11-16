@@ -1,0 +1,49 @@
+PY := .venv/bin/python
+SCRAPY := .venv/bin/scrapy
+
+.PHONY: setup test lint check shell crawl-books crawl-quotes-api crawl-quotes-crawl crawl-iso crawl-iso-dst db-up db-down clean
+
+setup:  ## create the virtualenv and install everything (needs uv: https://docs.astral.sh/uv/)
+	uv venv --python 3.13 .venv
+	uv pip install --python $(PY) -e ".[dev]"
+
+test:  ## offline unit tests (fixtures, no network)
+	$(PY) -m pytest -q
+
+lint:
+	.venv/bin/ruff check .
+
+check:  ## Scrapy contracts: hits the live practice site
+	$(SCRAPY) check books
+
+shell:  ## interactive selector playground
+	$(SCRAPY) shell "https://books.toscrape.com/"
+
+crawl-books:  ## 50 books, validated and stored (data/crawl.db)
+	$(PY) scripts/run_spider.py books --max-items 50
+
+crawl-quotes-api:
+	$(PY) scripts/run_spider.py quotes_api
+
+crawl-quotes-crawl:
+	$(PY) scripts/run_spider.py quotes_crawl
+
+crawl-iso:  ## mock market feed, a normal day with deliberately bad rows
+	@$(PY) scripts/serve_mock.py & echo $$! > .mock.pid; sleep 1; \
+	$(PY) scripts/run_spider.py iso_prices -a start_date=2026-06-15; status=$$?; \
+	kill `cat .mock.pid`; rm -f .mock.pid; exit $$status
+
+crawl-iso-dst:  ## the 23-hour and 25-hour days
+	@$(PY) scripts/serve_mock.py & echo $$! > .mock.pid; sleep 1; \
+	$(PY) scripts/run_spider.py iso_prices -a start_date=2026-03-08; s1=$$?; \
+	$(PY) scripts/run_spider.py iso_prices -a start_date=2026-11-01; s2=$$?; \
+	kill `cat .mock.pid`; rm -f .mock.pid; exit $$((s1 + s2))
+
+db-up:  ## local PostgreSQL; then: export DATABASE_URL=postgresql+psycopg://crawler:crawler@localhost:5432/crawl
+	docker compose up -d db
+
+db-down:
+	docker compose down
+
+clean:
+	rm -rf data .scrapy jobs .pytest_cache .ruff_cache

@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: |
+          uv venv --python 3.13 .venv
+          uv pip install --python .venv/bin/python -e ".[dev]"
+      - name: Lint
+        run: .venv/bin/ruff check .
+      - name: Unit tests (offline, fixtures only)
+        run: .venv/bin/python -m pytest -q
+      # Live contract checks hit a real site, so run them on a schedule, not on every push:
+      #   .venv/bin/scrapy check books

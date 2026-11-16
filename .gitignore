@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+data/
+.scrapy/
+jobs/
+.mock.pid
+*.egg-info/
