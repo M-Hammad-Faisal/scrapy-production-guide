@@ -9,7 +9,7 @@ duplicates, and a revised value overwrites the old one.
 from __future__ import annotations
 
 import warnings
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -56,6 +56,9 @@ iso_prices = sa.Table(
     sa.Column("interval_minutes", sa.Integer, nullable=False),
     sa.Column("price_usd_mwh", sa.Numeric(12, 4)),
     sa.Column("local_label", sa.Text),
+    sa.Column("origin", sa.Text, nullable=False, server_default="scraped"),
+    sa.Column("entered_by", sa.Text),
+    sa.Column("reason", sa.Text),
     sa.Column("scraped_at", sa.DateTime(timezone=True), nullable=False),
 )
 
@@ -78,16 +81,39 @@ def item_to_row(item: Any) -> tuple[sa.Table, list[str], dict[str, Any]]:
     return table, key, row
 
 
-def upsert_statement(dialect_name: str, table: sa.Table, key: list[str], rows: list[dict]):
-    """Build a dialect-specific ``INSERT ... ON CONFLICT DO UPDATE``."""
+def upsert_statement(
+    dialect_name: str,
+    table: sa.Table,
+    key: list[str],
+    rows: list[dict],
+    protect_manual: bool = False,
+):
+    """Build a dialect-specific ``INSERT ... ON CONFLICT DO UPDATE``.
+
+    ``protect_manual=True`` adds ``WHERE origin <> 'manual'`` to the update: a scraper run may
+    insert new rows and refresh scraped rows, but it must NEVER overwrite a value someone entered
+    by hand. A conflicting row that fails the WHERE is skipped silently, which is why
+    ``write_batch`` compares the affected row count with the number of rows it sent.
+    """
     insert_fn = postgresql.insert if dialect_name == "postgresql" else sqlite.insert
     stmt = insert_fn(table).values(rows)
     update_cols = {c.name: stmt.excluded[c.name] for c in table.c if c.name not in key}
-    return stmt.on_conflict_do_update(index_elements=key, set_=update_cols)
+    where = table.c.origin != "manual" if protect_manual else None
+    return stmt.on_conflict_do_update(index_elements=key, set_=update_cols, where=where)
 
 
-def write_batch(engine: sa.Engine, items: list[Any]) -> int:
-    """Write a list of items, grouped by table, in one transaction. Returns rows written."""
+@dataclass
+class WriteResult:
+    written: int  # rows inserted or updated
+    skipped: int  # rows left alone because a manual value takes precedence
+
+
+def write_batch(engine: sa.Engine, items: list[Any], *, manual: bool = False) -> WriteResult:
+    """Write items, grouped by table, in one transaction.
+
+    ``manual=True`` is for the manual-entry path: it may overwrite anything. The default
+    (scraper) path will not overwrite rows whose ``origin`` is ``manual``.
+    """
     # Gotcha: PostgreSQL refuses a multi-row upsert that contains the same key twice
     # ("cannot affect row a second time"). Collapse duplicates inside the batch, last one wins.
     grouped: dict[str, tuple[sa.Table, list[str], dict[tuple, dict]]] = {}
@@ -96,13 +122,22 @@ def write_batch(engine: sa.Engine, items: list[Any]) -> int:
         bucket = grouped.setdefault(table.name, (table, key, {}))[2]
         bucket[tuple(row[k] for k in key)] = row
 
-    written = 0
+    written = skipped = 0
     with engine.begin() as conn:
         for table, key, rows_by_key in grouped.values():
             rows = list(rows_by_key.values())
-            conn.execute(upsert_statement(engine.dialect.name, table, key, rows))
-            written += len(rows)
-    return written
+            protect = (not manual) and "origin" in table.c
+            stmt = upsert_statement(engine.dialect.name, table, key, rows, protect_manual=protect)
+            # Count with RETURNING, not rowcount. Found by the PostgreSQL integration test:
+            # PostgreSQL itself reports "INSERT 0 0" for a skipped conflict, but SQLAlchemy
+            # returns rowcount = -1 for this statement, so a rowcount-based counter silently
+            # reported "everything written" and never noticed a protected manual value.
+            # RETURNING yields one row per inserted/updated row and none for a skipped one,
+            # on both PostgreSQL and SQLite.
+            affected = len(conn.execute(stmt.returning(*[table.c[k] for k in key])).all())
+            written += affected
+            skipped += len(rows) - affected
+    return WriteResult(written=written, skipped=skipped)
 
 
 def create_all(engine: sa.Engine) -> None:

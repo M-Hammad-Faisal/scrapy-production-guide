@@ -76,7 +76,7 @@ The **login-then-hand-off** pattern is often the best answer to "must have Selen
 | Option | Use when |
 |---|---|
 | PostgreSQL | Structured, relational, you query and join it, you need upserts and constraints (default choice) |
-| MongoDB | Records have uneven shapes, or you store raw documents beside parsed fields |
+| MongoDB | Records have uneven shapes, or you store raw documents beside parsed fields (working pipeline and the four traps: `crawlers/mongo_pipeline.py`, docs/08) |
 | JSON Lines file (`FEEDS`) | Debugging, handoffs, backups of raw output |
 | S3/object storage | Raw HTML or PDFs kept as evidence (see the migration guide) |
 

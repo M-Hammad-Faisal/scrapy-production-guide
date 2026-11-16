@@ -110,8 +110,8 @@ class TestStorage:
 
     def test_duplicate_keys_inside_one_batch_do_not_crash(self, engine):
         # PostgreSQL would reject this multi-row upsert; write_batch collapses it first.
-        written = storage.write_batch(engine, [book(title="old"), book(title="new")])
-        assert written == 1
+        result = storage.write_batch(engine, [book(title="old"), book(title="new")])
+        assert result.written == 1
         with engine.connect() as conn:
             assert conn.execute(sa.select(storage.books.c.title)).scalar_one() == "new"
 

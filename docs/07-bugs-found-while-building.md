@@ -52,7 +52,25 @@ These were found by running the project against real sites, not by reading docum
 
 **Lesson.** Counting a problem is not the same as acting on it. Decide up front which counters mean "the data may be wrong" and wire them to the exit code.
 
-## 6. Smaller things worth knowing
+## 6. A skipped conflict counted as "written" on PostgreSQL
+
+**Symptom.** The integration test for "a crawl must not overwrite a manual value" failed on PostgreSQL: the value *was* protected, but the pipeline reported `written=1, skipped=0` instead of `written=0, skipped=1`. The same test had passed on SQLite.
+
+**Cause.** The counter used `result.rowcount`. PostgreSQL itself says `INSERT 0 0` for a skipped conflict, but SQLAlchemy returns `rowcount = -1` for this statement, and the code treated `-1` as "unknown, assume everything was written". SQLite reports a real count, which is why the offline tests passed.
+
+**Fix.** Count with `RETURNING`: one row comes back per inserted or updated row and none for a skipped one, on both engines.
+
+**Lesson.** Do not trust `rowcount` on upserts. And an engine you cannot mock honestly (PostgreSQL's behaviour here) needs a test against the real engine. This is the strongest reason the integration suite exists: the protection worked, but the *monitoring of the protection* was silently wrong.
+
+## 7. `create_all()` never alters an existing table
+
+**Symptom.** After adding `origin`, `entered_by` and `reason` to `iso_prices`, a database created earlier failed every write with `column "origin" of relation "iso_prices" does not exist`, while `create_all()` itself reported no error.
+
+**Cause.** `create_all()` only creates *missing* tables. An existing table is skipped, not compared or altered.
+
+**Fix for this project.** Drop and recreate in development. In production use a migration tool (Alembic): add nullable columns, backfill, then add constraints.
+
+## 8. Smaller things worth knowing
 
 - **`CLOSESPIDER_ITEMCOUNT` is approximate.** Asking for 45 items returned 52, because requests already in flight finish. Use it for smoke tests, not for exact limits.
 - **Deprecated feed option.** `overwrite=False` in `FEEDS` printed a deprecation warning. The tests treat Scrapy deprecation warnings as errors (`filterwarnings`), which is how component-signature changes in newer Scrapy versions were caught early.
@@ -60,10 +78,8 @@ These were found by running the project against real sites, not by reading docum
 - **PostgreSQL rejects a multi-row upsert that contains the same key twice** ("cannot affect row a second time"). `write_batch` collapses duplicates within a batch first.
 - **Negative prices are valid in power markets.** The validation rule allows them. A rule that says "price must be positive" would have silently dropped real data.
 
-## What was not verified
+## What was verified, and what was not
 
-Being straightforward about limits:
-
-- **PostgreSQL was verified live** (postgres:16 via `make db-up`): three ISO days were crawled twice each and the table held exactly the expected 142 distinct rows, so reruns are idempotent. The repeated fall-back hour was stored as two UTC instants and a legitimate negative price was kept.
+- **PostgreSQL 16 and MongoDB 7 were verified against real servers** (`make test-integration`, 10 tests) and by a full end-to-end run: a crawl into both databases, `curl` requests to the real API (401 without a key, 400 for a naive timestamp, 201 for a valid entry), then a second crawl that left the manual value untouched and reported `skipped_manual_override: 1`.
 - The **`quotes_js` Playwright spider** loads, launches the browser handler and reports failure correctly, but it did not complete a crawl because the browser build it needs was not installed. Run `playwright install chromium` and try it.
-- Nothing here was run at production scale. It is a learning project with real mechanics, not a claim of production operations.
+- Nothing here was run at production scale or against a managed cloud database. It is a learning project with real mechanics, not a claim of production operations.

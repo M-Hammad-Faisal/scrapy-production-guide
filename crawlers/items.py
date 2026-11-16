@@ -44,3 +44,7 @@ class PriceItem:
     interval_minutes: int
     price_usd_mwh: Decimal | None
     local_label: str  # the original text from the source, kept for audit
+    # Provenance. Scraped rows keep the defaults; the manual-entry API sets all three.
+    origin: str = "scraped"  # "scraped" or "manual"
+    entered_by: str | None = None
+    reason: str | None = None

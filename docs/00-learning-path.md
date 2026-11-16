@@ -35,6 +35,8 @@ Goal by end of day: you can say what you built, what broke, and how you would mo
 
 - Add a second ISO-style source to `iso_prices` with a different timezone and a different file layout. Add a test.
 - Switch storage to PostgreSQL with `docker compose up -d db` and set `DATABASE_URL`. Rerun twice and confirm no duplicate rows.
+- Run `make api`, enter a price by hand with the curl example in `08-manual-entry-api-and-mongodb.md`, then rerun `make crawl-iso` and confirm the crawl does not overwrite it.
+- Run `make test-integration` and read `tests/test_integration.py`: it shows how PostgreSQL and MongoDB differ in ways mocks cannot.
 - Add a Playwright spider for `quotes.toscrape.com/js/` (see `quotes_js.py`) and measure how much slower it is than the API spider.
 - Write a spider for a real public source you care about, after reading its terms and robots.txt.
 

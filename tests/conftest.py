@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+import django
 import pytest
 from scrapy import Spider
 from scrapy.http import HtmlResponse, TextResponse
@@ -7,6 +9,10 @@ from scrapy.utils.test import get_crawler
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MOCK_ISO = Path(__file__).parent.parent / "mock_iso"
+
+# Configure Django once, before any test module imports the manual-entry app.
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "manual_entry.settings")
+django.setup()
 
 
 @pytest.fixture

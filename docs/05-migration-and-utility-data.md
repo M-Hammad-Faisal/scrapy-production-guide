@@ -35,6 +35,8 @@ The principle: a manual record must not bypass the checks. A good design:
 - Entry through a small DRF endpoint, a Django admin form, or a CSV upload that goes through the same ingestion function.
 - Manual values should not be silently overwritten by the next crawl: decide a precedence rule (for example manual wins until released) and document it.
 
+This repo implements the whole design as a working demo: see `08-manual-entry-api-and-mongodb.md`, the `manual_entry/` Django REST Framework app and `crawlers/ingest.py`.
+
 ## ISO/RTO and market data: what to know
 
 An **ISO** (independent system operator) or **RTO** (regional transmission organization) runs a power grid and its wholesale market. Examples include PJM, MISO, ERCOT, CAISO, NYISO, ISO-NE and SPP. They typically publish prices, load, generation and outage data, often through official downloads or APIs, with reports in CSV, JSON, XML or PDF.

@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install dependencies first so Docker caches this layer when only code changes.
 COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install "scrapy>=2.13" sqlalchemy "psycopg[binary]" python-dotenv tzdata
+RUN pip install --upgrade pip && pip install "scrapy>=2.13" sqlalchemy "psycopg[binary]" pymongo python-dotenv tzdata
 
 COPY crawlers ./crawlers
 COPY scripts ./scripts

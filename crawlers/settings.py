@@ -66,7 +66,8 @@ PROXY_URLS = _env_list("PROXY_URLS")
 ITEM_PIPELINES = {
     "crawlers.pipelines.ValidationPipeline": 100,  # reject bad items first, count by rule
     "crawlers.pipelines.DedupePipeline": 200,  # cheap in-run dedupe
-    "crawlers.pipelines.StoragePipeline": 300,  # batched idempotent upsert
+    "crawlers.pipelines.StoragePipeline": 300,  # batched idempotent upsert (SQL)
+    "crawlers.mongo_pipeline.MongoPipeline": 310,  # optional second sink; off unless MONGODB_URI
 }
 EXTENSIONS = {
     "crawlers.extensions.GuardExtension": 500,
@@ -80,6 +81,10 @@ MAX_DROP_RATIO = 0.2  # more than 20% rejected items means the selectors probabl
 #   DATABASE_URL=postgresql+psycopg://crawler:crawler@localhost:5432/crawl
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/crawl.db")
 STORAGE_BATCH_SIZE = 100
+# Optional MongoDB sink (docker compose up -d mongo):
+#   MONGODB_URI=mongodb://localhost:27017
+MONGODB_URI = os.getenv("MONGODB_URI", "")
+MONGODB_DB = os.getenv("MONGODB_DB", "crawl")
 
 # Raw output as JSON Lines: great for debugging and backups. Use JSON Lines, not a single JSON
 # array: if the process dies, an array file is invalid, while JSON Lines keeps every finished line.

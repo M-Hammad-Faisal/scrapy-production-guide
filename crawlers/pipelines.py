@@ -59,6 +59,14 @@ def _price_rules() -> dict[str, Rule]:
             and i.interval_start_utc.utcoffset().total_seconds() == 0
             else "timestamp is not UTC-aware"
         ),
+        # A hand-entered value must say who entered it and why: that is the audit trail.
+        "manual_needs_reason": lambda i: (
+            None if i.origin != "manual" or (i.reason and len(i.reason.strip()) >= 5)
+            else "manual entries need a reason (at least 5 characters)"
+        ),
+        "manual_needs_author": lambda i: (
+            None if i.origin != "manual" or i.entered_by else "manual entries need entered_by"
+        ),
     }
 
 
@@ -67,6 +75,19 @@ RULES: dict[type, dict[str, Rule]] = {
     QuoteItem: _quote_rules(),
     PriceItem: _price_rules(),
 }
+
+
+def validate_item(item: Any) -> list[tuple[str, str]]:
+    """Run every rule for this item type. Returns [(rule_name, message), ...]; empty means valid.
+
+    This is THE validation function: the Scrapy pipeline below and the manual-entry API both call
+    it, so a hand-entered record can never pass checks a scraped record would fail.
+    """
+    return [
+        (name, error)
+        for name, rule in RULES.get(type(item), {}).items()
+        if (error := rule(item))
+    ]
 
 
 class ValidationPipeline:
@@ -80,11 +101,11 @@ class ValidationPipeline:
         return cls(crawler)
 
     def process_item(self, item):
-        for name, rule in RULES.get(type(item), {}).items():
-            error = rule(item)
-            if error:
-                self.stats.inc_value(f"validation/failed/{name}")
-                raise DropItem(f"{name}: {error}")
+        problems = validate_item(item)
+        if problems:
+            name, error = problems[0]
+            self.stats.inc_value(f"validation/failed/{name}")
+            raise DropItem(f"{name}: {error}")
         self.stats.inc_value("validation/passed")
         return item
 
@@ -167,9 +188,12 @@ class StoragePipeline:
         if not batch:
             return
         assert self.engine is not None
-        written = await asyncio.to_thread(storage.write_batch, self.engine, batch)
-        self.stats.inc_value("storage/rows_written", written)
+        result = await asyncio.to_thread(storage.write_batch, self.engine, batch)
+        self.stats.inc_value("storage/rows_written", result.written)
         self.stats.inc_value("storage/batches")
+        if result.skipped:
+            # A manual value was protected from being overwritten by the crawl.
+            self.stats.inc_value("storage/skipped_manual_override", result.skipped)
 
 
 __all__ = ["ValidationPipeline", "DedupePipeline", "StoragePipeline", "RULES"]

@@ -87,6 +87,8 @@ def main() -> int:
         "items": stats.get("item_scraped_count", 0),
         "dropped": stats.get("item_dropped_count", 0),
         "rows_written": stats.get("storage/rows_written", 0),
+        "mongo_rows_written": stats.get("mongo/rows_written", 0),
+        "skipped_manual_override": stats.get("storage/skipped_manual_override", 0),
         "problems": problems,
     }
     print(json.dumps(summary, indent=2, default=str))

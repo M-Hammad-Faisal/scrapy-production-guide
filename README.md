@@ -25,6 +25,8 @@ It comes with a guide that says **when to use what** and **what goes wrong in pr
 | Storage | `crawlers/storage.py` | Natural keys + `ON CONFLICT DO UPDATE` (SQLite and PostgreSQL) |
 | Middlewares | `crawlers/middlewares.py` | Soft-block detection with retry limit, UA pool, proxy rotation |
 | Guard extension | `crawlers/extensions.py` | Fails a run on too few items or too many drops |
+| MongoDB sink | `crawlers/mongo_pipeline.py` | Batched, idempotent, manual-protected; handles Decimal128, tz-aware times, E11000 |
+| Manual-entry API | `manual_entry/`, `crawlers/ingest.py` | DRF endpoints using the same validation and upsert as the scrapers, with an audit trail and "manual wins" |
 | Runner | `scripts/run_spider.py` | Turns a bad run into exit code 2 (`scrapy crawl` returns 0) |
 | Time utilities | `crawlers/utils/timeutils.py` | Hour-ending to UTC, 23- and 25-hour days |
 
@@ -34,7 +36,9 @@ Needs Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 make setup           # virtualenv + dependencies
-make test            # 59 offline tests, no network
+make test            # 82 offline tests, no network
+make test-integration # 10 tests against real PostgreSQL + MongoDB (needs Docker)
+make api             # manual-entry API on :8000 (demo key alice / s3cret)
 make crawl-books     # 50 real books -> validated -> data/crawl.db
 make crawl-iso       # mock market feed, includes deliberately bad rows
 make shell           # selector playground on books.toscrape.com
@@ -65,14 +69,15 @@ export DATABASE_URL=postgresql+psycopg://crawler:crawler@localhost:5432/crawl
 | [`docs/03-production-gotchas.md`](docs/03-production-gotchas.md) | What breaks in production, with a final checklist |
 | [`docs/04-bot-protection-and-browsers.md`](docs/04-bot-protection-and-browsers.md) | Escalation ladder, soft blocks, Selenium and Playwright with Scrapy |
 | [`docs/05-migration-and-utility-data.md`](docs/05-migration-and-utility-data.md) | Migrating scrapers between languages, manual-entry tooling, market and regulator data |
-| [`docs/07-bugs-found-while-building.md`](docs/07-bugs-found-while-building.md) | Six real bugs found by running this against live sites |
+| [`docs/07-bugs-found-while-building.md`](docs/07-bugs-found-while-building.md) | Real bugs found by running this against live sites and real databases |
+| [`docs/08-manual-entry-api-and-mongodb.md`](docs/08-manual-entry-api-and-mongodb.md) | The manual-entry design, when to pick MongoDB, and its traps |
 
 ## Honest limits
 
-- PostgreSQL was verified against a real server (postgres:16 in Docker): reruns of the same crawl left no duplicate rows. Nothing was run against a managed cloud database.
+- PostgreSQL 16 and MongoDB 7 were verified against real servers in Docker (integration tests plus an end-to-end run). Nothing was run against a managed cloud database.
 - `quotes_js` needs `playwright install chromium`. It was checked up to browser launch.
 - It is a learning project. It has not run at production scale.
 
 ## Tests
 
-`make test` runs 59 tests offline against saved HTML and CSV fixtures. Scrapy deprecation warnings are treated as errors so API changes in new Scrapy versions show up in CI. `make check` runs the Scrapy contracts against the live practice site.
+`make test` runs 82 tests offline against saved HTML and CSV fixtures. `make test-integration` runs 10 more against real PostgreSQL and MongoDB in Docker. Scrapy deprecation warnings are treated as errors so API changes in new Scrapy versions show up in CI. `make check` runs the Scrapy contracts against the live practice site.

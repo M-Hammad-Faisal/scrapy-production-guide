@@ -8,16 +8,19 @@ dependencies = [
     "scrapy>=2.13",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
+    "pymongo>=4.8",
     "python-dotenv>=1.0",
     "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+api = ["django>=5.1", "djangorestframework>=3.15"]
+dev = ["pytest>=8", "ruff>=0.6", "django>=5.1", "djangorestframework>=3.15"]
 browser = ["scrapy-playwright>=0.0.40"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["integration: needs real PostgreSQL/MongoDB (make test-integration)"]
 filterwarnings = [
     "error::scrapy.exceptions.ScrapyDeprecationWarning",
 ]
@@ -30,4 +33,4 @@ target-version = "py311"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.setuptools.packages.find]
-include = ["crawlers*"]
+include = ["crawlers*", "manual_entry*"]
